@@ -6,7 +6,7 @@ from pathlib import Path
 from subprocess import Popen
 from typing import NoReturn
 
-from prawcore import ResponseException
+from prawcore.exceptions import ResponseException
 
 from reddit.subreddit import get_subreddit_threads
 from utils import settings
@@ -54,8 +54,10 @@ def main(POST_ID=None) -> None:
         "video": get_background_config("video"),
         "audio": get_background_config("audio"),
     }
-    download_background_video(bg_config["video"])
-    download_background_audio(bg_config["audio"])
+    if bg_config["video"] is not None:
+        download_background_video(bg_config["video"])
+    if bg_config["audio"] is not None:
+        download_background_audio(bg_config["audio"])
     chop_background(bg_config, length, reddit_object)
     make_final_video(number_of_comments, length, reddit_object, bg_config)
 

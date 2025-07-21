@@ -65,6 +65,10 @@ def get_background_config(mode: str):
         print_substep("No background selected. Picking random background'")
         choice = None
 
+    # Handle empty string (disabled background)
+    if choice == "":
+        return None
+
     # Handle default / not supported background using default option.
     # Default : pick random from supported background.
     if not choice or choice not in background_options[mode]:
@@ -89,6 +93,12 @@ def download_background_video(background_config: Tuple[str, str, str, Any]):
         "format": "bestvideo[height<=1080][ext=mp4]",
         "outtmpl": f"assets/backgrounds/video/{credit}-{filename}",
         "retries": 10,
+        "http_headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        },
+        "extractor_retries": 3,
+        "fragment_retries": 3,
+        "skip_unavailable_fragments": True,
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -112,6 +122,15 @@ def download_background_audio(background_config: Tuple[str, str, str]):
         "outtmpl": f"./assets/backgrounds/audio/{credit}-{filename}",
         "format": "bestaudio/best",
         "extract_audio": True,
+        "retries": 10,
+        "http_headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        },
+        "extractor_retries": 3,
+        "fragment_retries": 3,
+        "skip_unavailable_fragments": True,
+        "writesubtitles": False,
+        "writeautomaticsub": False,
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -129,8 +148,8 @@ def chop_background(background_config: Dict[str, Tuple], video_length: int, redd
     """
     id = re.sub(r"[^\w\s-]", "", reddit_object["thread_id"])
 
-    if settings.config["settings"]["background"][f"background_audio_volume"] == 0:
-        print_step("Volume was set to 0. Skipping background audio creation . . .")
+    if settings.config["settings"]["background"][f"background_audio_volume"] == 0 or background_config["audio"] is None:
+        print_step("Volume was set to 0 or no background audio selected. Skipping background audio creation . . .")
     else:
         print_step("Finding a spot in the backgrounds audio to chop...✂️")
         audio_choice = f"{background_config['audio'][2]}-{background_config['audio'][1]}"
@@ -141,6 +160,10 @@ def chop_background(background_config: Dict[str, Tuple], video_length: int, redd
         background_audio = background_audio.subclip(start_time_audio, end_time_audio)
         background_audio.write_audiofile(f"assets/temp/{id}/background.mp3")
 
+    if background_config["video"] is None:
+        print_step("No background video selected. Skipping background video creation . . .")
+        return None
+    
     print_step("Finding a spot in the backgrounds video to chop...✂️")
     video_choice = f"{background_config['video'][2]}-{background_config['video'][1]}"
     background_video = VideoFileClip(f"assets/backgrounds/video/{video_choice}")

@@ -85,21 +85,44 @@ def name_normalize(name: str) -> str:
 
 def prepare_background(reddit_id: str, W: int, H: int) -> str:
     output_path = f"assets/temp/{reddit_id}/background_noaudio.mp4"
-    output = (
-        ffmpeg.input(f"assets/temp/{reddit_id}/background.mp4")
-        .filter("crop", f"ih*({W}/{H})", "ih")
-        .output(
-            output_path,
-            an=None,
-            **{
-                "c:v": "h264",
-                "b:v": "20M",
-                "b:a": "192k",
-                "threads": multiprocessing.cpu_count(),
-            },
+    background_video_path = f"assets/temp/{reddit_id}/background.mp4"
+    
+    # Check if background video exists
+    if exists(background_video_path):
+        # Use the existing background video
+        output = (
+            ffmpeg.input(background_video_path)
+            .filter("crop", f"ih*({W}/{H})", "ih")
+            .output(
+                output_path,
+                an=None,
+                **{
+                    "c:v": "h264",
+                    "b:v": "20M",
+                    "b:a": "192k",
+                    "threads": multiprocessing.cpu_count(),
+                },
+            )
+            .overwrite_output()
         )
-        .overwrite_output()
-    )
+    else:
+        # Create a solid color background when no video is available
+        print_substep("No background video found. Creating solid color background...")
+        output = (
+            ffmpeg.input(f"color=black:size={W}x{H}:duration=300:rate=30", f="lavfi")
+            .output(
+                output_path,
+                an=None,
+                **{
+                    "c:v": "h264",
+                    "b:v": "20M",
+                    "b:a": "192k",
+                    "threads": multiprocessing.cpu_count(),
+                },
+            )
+            .overwrite_output()
+        )
+    
     try:
         output.run(quiet=True)
     except ffmpeg.Error as e:
@@ -172,11 +195,13 @@ def merge_background_audio(audio: ffmpeg, reddit_id: str):
         reddit_id (str): The ID of subreddit
     """
     background_audio_volume = settings.config["settings"]["background"]["background_audio_volume"]
-    if background_audio_volume == 0:
+    background_audio_path = f"assets/temp/{reddit_id}/background.mp3"
+    
+    if background_audio_volume == 0 or not exists(background_audio_path):
         return audio  # Return the original audio
     else:
         # sets volume to config
-        bg_audio = ffmpeg.input(f"assets/temp/{reddit_id}/background.mp3").filter(
+        bg_audio = ffmpeg.input(background_audio_path).filter(
             "volume",
             background_audio_volume,
         )
@@ -393,16 +418,17 @@ def make_final_video(
             thumbnailSave.save(f"./assets/temp/{reddit_id}/thumbnail.png")
             print_substep(f"Thumbnail - Building Thumbnail in assets/temp/{reddit_id}/thumbnail.png")
 
-    text = f"Background by {background_config['video'][2]}"
-    background_clip = ffmpeg.drawtext(
-        background_clip,
-        text=text,
-        x=f"(w-text_w)",
-        y=f"(h-text_h)",
-        fontsize=5,
-        fontcolor="White",
-        fontfile=os.path.join("fonts", "Roboto-Regular.ttf"),
-    )
+    if background_config['video'] is not None:
+        text = f"Background by {background_config['video'][2]}"
+        background_clip = ffmpeg.drawtext(
+            background_clip,
+            text=text,
+            x=f"(w-text_w)",
+            y=f"(h-text_h)",
+            fontsize=5,
+            fontcolor="White",
+            fontfile=os.path.join("fonts", "Roboto-Regular.ttf"),
+        )
     background_clip = background_clip.filter("scale", W, H)
     print_step("Rendering the video 🎥")
     from tqdm import tqdm
@@ -475,7 +501,8 @@ def make_final_video(
         old_percentage = pbar.n
         pbar.update(100 - old_percentage)
     pbar.close()
-    save_data(subreddit, filename + ".mp4", title, idx, background_config["video"][2])
+    background_credit = background_config["video"][2] if background_config["video"] is not None else "None"
+    save_data(subreddit, filename + ".mp4", title, idx, background_credit)
     print_step("Removing temporary files 🗑")
     cleanups = cleanup(reddit_id)
     print_substep(f"Removed {cleanups} temporary files 🗑")
